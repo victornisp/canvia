@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Lightbulb, Briefcase, ListTodo, FileText, Plus, Maximize2, Grid3x3, Tag, X, Check } from 'lucide-react';
+import { Lightbulb, Briefcase, ListTodo, FileText, Plus, Maximize2, LayoutGrid, Tag, X, Check } from 'lucide-react';
 
 const App = () => {
   const [cards, setCards] = useState([]);
@@ -214,7 +214,7 @@ const App = () => {
               transition: 'all 0.3s ease'
             }}
           >
-            {viewMode === 'canvas' ? <Grid3x3 size={18} /> : <Maximize2 size={18} />}
+            {viewMode === 'canvas' ? <LayoutGrid size={18} /> : <Maximize2 size={18} />}
             {viewMode === 'canvas' ? 'Organizar' : 'Canvas'}
           </button>
           
