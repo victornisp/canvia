@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Lightbulb, Briefcase, ListTodo, FileText, Plus, Maximize2, Grid3x3, Tag, X, Check, LogOut } from 'lucide-react';
+import { Lightbulb, Briefcase, ListTodo, FileText, Plus, Maximize2, Grid3X3, Tag, X, Check, LogOut } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 const App = () => {
