@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Lightbulb, Briefcase, ListTodo, FileText, Plus, Maximize2, Grid3X3, Tag, X, Check, LogOut } from 'lucide-react';
-import { supabase } from './supabaseClient';
+import { Lightbulb, Briefcase, ListTodo, FileText, Plus, Maximize2, Grid3X3, Tag, X, Check } from 'lucide-react';
 
 const App = () => {
   const [cards, setCards] = useState([]);
@@ -11,8 +10,6 @@ const App = () => {
   const [showNewCardMenu, setShowNewCardMenu] = useState(false);
   const [showTagManager, setShowTagManager] = useState(false);
   const [selectedCardForTags, setSelectedCardForTags] = useState(null);
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [newTagName, setNewTagName] = useState('');
   const canvasRef = useRef(null);
 
@@ -25,87 +22,40 @@ const App = () => {
 
   const getCardType = (type) => cardTypes.find(t => t.type === type) || cardTypes[0];
 
-  // Auth check
+  // Load cards and tags from localStorage
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    const savedCards = localStorage.getItem('canviaCards');
+    const savedTags = localStorage.getItem('canviaTags');
+    
+    if (savedCards) {
+      setCards(JSON.parse(savedCards));
+    } else {
+      // Demo cards
+      setCards([
+        { id: 1, type: 'project', title: 'Canvia', content: 'App de gestión de portafolio', x: 100, y: 100, color: '#ff6b6b', is_active: true, tags: [], created_at: new Date().toISOString() },
+        { id: 2, type: 'idea', title: 'Relaciones visuales', content: 'Conectar cartas con líneas', x: 400, y: 150, color: '#4ecdc4', is_active: true, tags: [], created_at: new Date().toISOString() },
+        { id: 3, type: 'task', title: 'Validar funcionalidades', content: 'Probar drag & drop y CRUD', x: 250, y: 350, color: '#ffe66d', is_active: true, tags: [], created_at: new Date().toISOString() },
+      ]);
+    }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
+    if (savedTags) {
+      setTags(JSON.parse(savedTags));
+    }
   }, []);
 
-  // Load cards and tags
+  // Save cards to localStorage
   useEffect(() => {
-    if (user) {
-      loadCards();
-      loadTags();
+    if (cards.length > 0) {
+      localStorage.setItem('canviaCards', JSON.stringify(cards));
     }
-  }, [user]);
+  }, [cards]);
 
-  const loadCards = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('cards')
-        .select(`
-          *,
-          card_tags (
-            tags (*)
-          )
-        `)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      const cardsWithTags = data.map(card => ({
-        ...card,
-        tags: card.card_tags?.map(ct => ct.tags) || []
-      }));
-
-      setCards(cardsWithTags);
-    } catch (error) {
-      console.error('Error loading cards:', error);
+  // Save tags to localStorage
+  useEffect(() => {
+    if (tags.length > 0) {
+      localStorage.setItem('canviaTags', JSON.stringify(tags));
     }
-  };
-
-  const loadTags = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('tags')
-        .select('*')
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-      setTags(data || []);
-    } catch (error) {
-      console.error('Error loading tags:', error);
-    }
-  };
-
-  const handleLogin = async () => {
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-      });
-      if (error) throw error;
-    } catch (error) {
-      alert('Error al iniciar sesión: ' + error.message);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-    } catch (error) {
-      alert('Error al cerrar sesión: ' + error.message);
-    }
-  };
+  }, [tags]);
 
   const handleMouseDown = (e, card) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'BUTTON') return;
@@ -132,161 +82,74 @@ const App = () => {
     ));
   };
 
-  const handleMouseUp = async () => {
-    if (draggedCard) {
-      try {
-        const { error } = await supabase
-          .from('cards')
-          .update({ 
-            x: draggedCard.x, 
-            y: draggedCard.y,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', draggedCard.id);
-
-        if (error) throw error;
-      } catch (error) {
-        console.error('Error updating card position:', error);
-      }
-    }
+  const handleMouseUp = () => {
     setDraggedCard(null);
   };
 
-  const createNewCard = async (type) => {
+  const createNewCard = (type) => {
     const cardType = getCardType(type);
-    try {
-      const { data, error } = await supabase
-        .from('cards')
-        .insert([
-          {
-            type: type,
-            title: `Nuevo ${cardType.label}`,
-            content: '',
-            color: cardType.color,
-            x: Math.random() * 300 + 100,
-            y: Math.random() * 200 + 100,
-            user_id: user.id,
-            is_active: true
-          }
-        ])
-        .select()
-        .single();
-
-      if (error) throw error;
-      
-      setCards([{ ...data, tags: [] }, ...cards]);
-      setShowNewCardMenu(false);
-    } catch (error) {
-      console.error('Error creating card:', error);
-      alert('Error al crear carta: ' + error.message);
-    }
+    const newCard = {
+      id: Date.now(),
+      type: type,
+      title: `Nuevo ${cardType.label}`,
+      content: '',
+      x: Math.random() * 300 + 100,
+      y: Math.random() * 200 + 100,
+      color: cardType.color,
+      is_active: true,
+      tags: [],
+      created_at: new Date().toISOString()
+    };
+    setCards([newCard, ...cards]);
+    setShowNewCardMenu(false);
   };
 
-  const updateCard = async (id, field, value) => {
+  const updateCard = (id, field, value) => {
     setCards(cards.map(card => 
       card.id === id ? { ...card, [field]: value } : card
     ));
-
-    try {
-      const { error } = await supabase
-        .from('cards')
-        .update({ 
-          [field]: value,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', id);
-
-      if (error) throw error;
-    } catch (error) {
-      console.error('Error updating card:', error);
-    }
   };
 
-  const deleteCard = async (id) => {
+  const deleteCard = (id) => {
     if (!confirm('¿Estás seguro de eliminar esta carta?')) return;
-
-    try {
-      const { error } = await supabase
-        .from('cards')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-      
-      setCards(cards.filter(card => card.id !== id));
-    } catch (error) {
-      console.error('Error deleting card:', error);
-      alert('Error al eliminar carta: ' + error.message);
-    }
+    setCards(cards.filter(card => card.id !== id));
   };
 
-  const toggleCardStatus = async (id, currentStatus) => {
-    await updateCard(id, 'is_active', !currentStatus);
+  const toggleCardStatus = (id, currentStatus) => {
+    updateCard(id, 'is_active', !currentStatus);
   };
 
-  const createTag = async () => {
+  const createTag = () => {
     if (!newTagName.trim()) return;
 
     const randomColor = '#' + Math.floor(Math.random()*16777215).toString(16);
-
-    try {
-      const { data, error } = await supabase
-        .from('tags')
-        .insert([
-          {
-            name: newTagName.trim(),
-            color: randomColor,
-            user_id: user.id
-          }
-        ])
-        .select()
-        .single();
-
-      if (error) throw error;
-      
-      setTags([...tags, data]);
-      setNewTagName('');
-    } catch (error) {
-      console.error('Error creating tag:', error);
-      alert('Error al crear tag: ' + error.message);
-    }
+    const newTag = {
+      id: Date.now(),
+      name: newTagName.trim(),
+      color: randomColor
+    };
+    
+    setTags([...tags, newTag]);
+    setNewTagName('');
   };
 
-  const toggleCardTag = async (cardId, tagId) => {
+  const toggleCardTag = (cardId, tagId) => {
     const card = cards.find(c => c.id === cardId);
     const hasTag = card.tags.some(t => t.id === tagId);
 
-    try {
-      if (hasTag) {
-        const { error } = await supabase
-          .from('card_tags')
-          .delete()
-          .eq('card_id', cardId)
-          .eq('tag_id', tagId);
-
-        if (error) throw error;
-
-        setCards(cards.map(c => 
-          c.id === cardId 
-            ? { ...c, tags: c.tags.filter(t => t.id !== tagId) }
-            : c
-        ));
-      } else {
-        const { error } = await supabase
-          .from('card_tags')
-          .insert([{ card_id: cardId, tag_id: tagId }]);
-
-        if (error) throw error;
-
-        const tag = tags.find(t => t.id === tagId);
-        setCards(cards.map(c => 
-          c.id === cardId 
-            ? { ...c, tags: [...c.tags, tag] }
-            : c
-        ));
-      }
-    } catch (error) {
-      console.error('Error toggling tag:', error);
+    if (hasTag) {
+      setCards(cards.map(c => 
+        c.id === cardId 
+          ? { ...c, tags: c.tags.filter(t => t.id !== tagId) }
+          : c
+      ));
+    } else {
+      const tag = tags.find(t => t.id === tagId);
+      setCards(cards.map(c => 
+        c.id === cardId 
+          ? { ...c, tags: [...c.tags, tag] }
+          : c
+      ));
     }
   };
 
@@ -297,95 +160,6 @@ const App = () => {
     });
     return organized;
   };
-
-  if (loading) {
-    return (
-      <div style={{
-        width: '100vw',
-        height: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'linear-gradient(135deg, #fdfbf7 0%, #f5ebe0 50%, #faf3e0 100%)',
-        fontFamily: "'DM Sans', sans-serif"
-      }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{
-            width: '50px',
-            height: '50px',
-            border: '4px solid #8b4513',
-            borderTopColor: 'transparent',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-            margin: '0 auto 20px'
-          }} />
-          <p style={{ color: '#8b4513', fontSize: '18px' }}>Cargando...</p>
-        </div>
-        <style>{`
-          @keyframes spin {
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div style={{
-        width: '100vw',
-        height: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'linear-gradient(135deg, #fdfbf7 0%, #f5ebe0 50%, #faf3e0 100%)',
-        fontFamily: "'DM Sans', sans-serif"
-      }}>
-        <div style={{
-          background: 'white',
-          padding: '48px',
-          borderRadius: '24px',
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-          textAlign: 'center',
-          maxWidth: '400px'
-        }}>
-          <h1 style={{
-            fontSize: '36px',
-            fontWeight: 700,
-            background: 'linear-gradient(135deg, #8b4513 0%, #d2691e 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            marginBottom: '16px'
-          }}>
-            IdeaCanvas
-          </h1>
-          <p style={{ color: '#666', marginBottom: '32px', fontSize: '16px' }}>
-            Tu espacio para gestionar proyectos y hacer brainstorming
-          </p>
-          <button
-            onClick={handleLogin}
-            style={{
-              width: '100%',
-              padding: '14px 24px',
-              background: 'linear-gradient(135deg, #8b4513 0%, #d2691e 100%)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '12px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: 600,
-              boxShadow: '0 4px 12px rgba(139, 69, 19, 0.3)',
-              transition: 'transform 0.2s ease'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-          >
-            Iniciar sesión con Google
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div style={{
@@ -411,28 +185,17 @@ const App = () => {
         borderBottom: '1px solid rgba(139, 69, 19, 0.1)',
         zIndex: 100
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <h1 style={{
-            margin: 0,
-            fontSize: '28px',
-            fontWeight: 700,
-            background: 'linear-gradient(135deg, #8b4513 0%, #d2691e 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            letterSpacing: '-0.5px'
-          }}>
-            IdeaCanvas
-          </h1>
-          <span style={{
-            fontSize: '14px',
-            color: '#666',
-            background: '#f0f0f0',
-            padding: '4px 12px',
-            borderRadius: '8px'
-          }}>
-            {user.email}
-          </span>
-        </div>
+        <h1 style={{
+          margin: 0,
+          fontSize: '28px',
+          fontWeight: 700,
+          background: 'linear-gradient(135deg, #8b4513 0%, #d2691e 100%)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          letterSpacing: '-0.5px'
+        }}>
+          Canvia
+        </h1>
         
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
@@ -451,7 +214,7 @@ const App = () => {
               transition: 'all 0.3s ease'
             }}
           >
-            {viewMode === 'canvas' ? <Grid3x3 size={18} /> : <Maximize2 size={18} />}
+            {viewMode === 'canvas' ? <Grid3X3 size={18} /> : <Maximize2 size={18} />}
             {viewMode === 'canvas' ? 'Organizar' : 'Canvas'}
           </button>
           
@@ -475,25 +238,6 @@ const App = () => {
           >
             <Plus size={18} />
             Nueva Idea
-          </button>
-
-          <button
-            onClick={handleLogout}
-            style={{
-              padding: '10px 20px',
-              background: 'white',
-              color: '#8b4513',
-              border: '2px solid #8b4513',
-              borderRadius: '12px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontWeight: 600,
-              transition: 'all 0.3s ease'
-            }}
-          >
-            <LogOut size={18} />
           </button>
         </div>
       </div>
@@ -783,7 +527,7 @@ const App = () => {
                   }}
                 />
 
-                {card.tags.length > 0 && (
+                {card.tags && card.tags.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
                     {card.tags.map(tag => (
                       <span
@@ -963,7 +707,7 @@ const App = () => {
                           }}
                         />
 
-                        {card.tags.length > 0 && (
+                        {card.tags && card.tags.length > 0 && (
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
                             {card.tags.map(tag => (
                               <span
@@ -1049,6 +793,52 @@ const App = () => {
           </div>
         </div>
       )}
+
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+        
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+        
+        * {
+          box-sizing: border-box;
+        }
+        
+        ::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+          background: rgba(139, 69, 19, 0.3);
+          border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+          background: rgba(139, 69, 19, 0.5);
+        }
+      `}</style>
     </div>
   );
 };
